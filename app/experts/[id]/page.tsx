@@ -1,5 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
+import { Navbar } from "@/components/navbar"
 import { notFound } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -24,7 +25,11 @@ export default async function ExpertPage({ params }: ExpertPageProps) {
   const courses = await getCoursesByInstructor(params.id)
 
   return (
-    <div className="container mx-auto px-4 py-12">
+    
+  
+    <div className="container mx-auto px-4 py-12 pt-32">
+
+          <Navbar />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
         <div className="md:col-span-1">
           <div className="aspect-square relative rounded-lg overflow-hidden mb-6">
@@ -34,7 +39,9 @@ export default async function ExpertPage({ params }: ExpertPageProps) {
               fill
               className="object-cover"
             />
+            
           </div>
+         
           <h1 className="text-3xl font-bold mb-4">{instructor.name}</h1>
           <div className="flex space-x-4 mb-6">
             <Link href="/experts">
