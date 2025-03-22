@@ -6,7 +6,7 @@ import { CourseCard } from "@/components/course-card"
 import { ExpertCard } from "@/components/expert-card"
 import { TestimonialCard } from "@/components/testimonial-card"
 import { getCourses, getInstructors, getTestimonials } from "@/lib/supabase-client"
-
+import { Analytics } from "@vercel/analytics/react"
 export const revalidate = 3600 // Revalidate every hour
 
 export default async function Home() {
@@ -127,7 +127,7 @@ export default async function Home() {
           </div>
         </section>
       </main>
-
+      <Analytics/>
       <Footer />
     </div>
   )
