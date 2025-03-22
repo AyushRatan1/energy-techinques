@@ -80,7 +80,7 @@ export async function getInstructors() {
   return data || []
 }
 
-export async function getInstructorById(id: string) {
+export async function getInstructor(id: string) {
   const { data, error } = await supabase.from("instructors").select("*").eq("id", id).single()
 
   if (error) {
@@ -89,6 +89,25 @@ export async function getInstructorById(id: string) {
   }
 
   return data
+}
+
+export async function getInstructorById(id: string) {
+  return getInstructor(id)
+}
+
+export async function getCoursesByInstructor(instructorId: string) {
+  const { data, error } = await supabase
+    .from("courses")
+    .select("*")
+    .eq("instructor_id", instructorId)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching courses by instructor:", error)
+    return []
+  }
+
+  return data || []
 }
 
 export async function createInstructor(

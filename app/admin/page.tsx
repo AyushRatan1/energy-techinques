@@ -13,9 +13,15 @@ import {
   getCourses, 
   getInstructors, 
   getTestimonials,
-  createCourse
+  createCourse,
+  createInstructor,
+  updateCourse,
+  updateInstructor,
+  deleteCourse,
+  deleteInstructor
 } from "@/lib/supabase-client"
 import type { Database } from "@/types/supabase"
+import { LoadingPage } from "@/components/ui/loading"
 
 type Course = Database["public"]["Tables"]["courses"]["Row"]
 type Instructor = Database["public"]["Tables"]["instructors"]["Row"]
@@ -25,6 +31,12 @@ export default function AdminPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("dashboard")
   const [showAddCourseForm, setShowAddCourseForm] = useState(false)
+  const [showEditCourseForm, setShowEditCourseForm] = useState(false)
+  const [showAddInstructorForm, setShowAddInstructorForm] = useState(false)
+  const [showEditInstructorForm, setShowEditInstructorForm] = useState(false)
+  const [currentCourse, setCurrentCourse] = useState<Course | null>(null)
+  const [currentInstructor, setCurrentInstructor] = useState<Instructor | null>(null)
+  
   const [courseFormData, setCourseFormData] = useState({
     title: "",
     description: "",
@@ -33,6 +45,13 @@ export default function AdminPage() {
     image_url: "/placeholder.svg?height=400&width=600",
     registration_link: ""
   })
+  
+  const [instructorFormData, setInstructorFormData] = useState({
+    name: "",
+    bio: "",
+    image_url: "/placeholder.svg?height=400&width=400"
+  })
+  
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   // State for the data
@@ -68,8 +87,31 @@ export default function AdminPage() {
     setCourseFormData(prev => ({ ...prev, [name]: value }))
   }
   
+  const handleInstructorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setInstructorFormData(prev => ({ ...prev, [name]: value }))
+  }
+  
   const handleInstructorSelect = (value: string) => {
     setCourseFormData(prev => ({ ...prev, instructor_id: value }))
+  }
+  
+  // Trigger revalidation of routes after data changes
+  const revalidateRoutes = async () => {
+    try {
+      // Revalidate home page
+      await fetch('/api/revalidate?path=/')
+      
+      // Revalidate courses page
+      await fetch('/api/revalidate?path=/courses')
+      
+      // Revalidate experts page
+      await fetch('/api/revalidate?path=/experts')
+      
+      console.log('Routes revalidated successfully')
+    } catch (error) {
+      console.error('Failed to revalidate routes:', error)
+    }
   }
   
   const handleAddCourse = async (e: React.FormEvent) => {
@@ -103,8 +145,14 @@ export default function AdminPage() {
           registration_link: ""
         })
         
+        // Trigger revalidation
+        await revalidateRoutes()
+        
         // Show success message
         alert("Course added successfully!")
+        
+        // Refresh the page to show updated data
+        router.refresh()
       }
     } catch (error) {
       console.error("Error adding course:", error)
@@ -113,15 +161,269 @@ export default function AdminPage() {
       setIsSubmitting(false)
     }
   }
+  
+  const handleEditCourse = (course: Course) => {
+    setCurrentCourse(course)
+    setCourseFormData({
+      title: course.title,
+      description: course.description,
+      duration: course.duration,
+      instructor_id: course.instructor_id,
+      image_url: course.image_url,
+      registration_link: course.registration_link || ""
+    })
+    setShowEditCourseForm(true)
+  }
+  
+  const handleUpdateCourse = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!currentCourse) return
+    
+    setIsSubmitting(true)
+    
+    try {
+      const updatedCourse = await updateCourse(currentCourse.id, {
+        title: courseFormData.title,
+        description: courseFormData.description,
+        duration: courseFormData.duration,
+        instructor_id: courseFormData.instructor_id,
+        image_url: courseFormData.image_url,
+        registration_link: courseFormData.registration_link
+      })
+      
+      if (updatedCourse) {
+        // Update the course in local state
+        setCourses(prev => 
+          prev.map(course => 
+            course.id === updatedCourse.id ? updatedCourse : course
+          )
+        )
+        
+        // Reset form and state
+        setIsSubmitting(false)
+        setShowEditCourseForm(false)
+        setCurrentCourse(null)
+        setCourseFormData({
+          title: "",
+          description: "",
+          duration: "",
+          instructor_id: "",
+          image_url: "/placeholder.svg?height=400&width=600",
+          registration_link: ""
+        })
+        
+        // Trigger revalidation
+        await revalidateRoutes()
+        
+        // Show success message
+        alert("Course updated successfully!")
+        
+        // Refresh the page to show updated data
+        router.refresh()
+      }
+    } catch (error) {
+      console.error("Error updating course:", error)
+      alert("Failed to update course. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDeleteCourse = async () => {
+    if (!currentCourse) return
+    
+    if (window.confirm("Are you sure you want to delete this course? This action cannot be undone.")) {
+      setIsSubmitting(true)
+      
+      try {
+        // Delete the course from Supabase
+        const success = await deleteCourse(currentCourse.id)
+        
+        if (success) {
+          // Remove the course from the local state
+          setCourses(prev => prev.filter(course => course.id !== currentCourse.id))
+          
+          // Reset form and state
+          setIsSubmitting(false)
+          setShowEditCourseForm(false)
+          setCurrentCourse(null)
+          setCourseFormData({
+            title: "",
+            description: "",
+            duration: "",
+            instructor_id: "",
+            image_url: "/placeholder.svg?height=400&width=600",
+            registration_link: ""
+          })
+          
+          // Trigger revalidation
+          await revalidateRoutes()
+          
+          // Show success message
+          alert("Course deleted successfully!")
+          
+          // Refresh the page to show updated data
+          router.refresh()
+        } else {
+          throw new Error("Failed to delete course")
+        }
+      } catch (error) {
+        console.error("Error deleting course:", error)
+        alert("Failed to delete course. Please try again.")
+      } finally {
+        setIsSubmitting(false)
+      }
+    }
+  }
+  
+  const handleAddInstructor = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    
+    try {
+      // Add the instructor to Supabase
+      const newInstructor = await createInstructor({
+        name: instructorFormData.name,
+        bio: instructorFormData.bio,
+        image_url: instructorFormData.image_url
+      })
+      
+      if (newInstructor) {
+        // Add the new instructor to the local state
+        setInstructors(prev => [newInstructor, ...prev])
+        
+        // Reset form and state
+        setIsSubmitting(false)
+        setShowAddInstructorForm(false)
+        setInstructorFormData({
+          name: "",
+          bio: "",
+          image_url: "/placeholder.svg?height=400&width=400"
+        })
+        
+        // Trigger revalidation
+        await revalidateRoutes()
+        
+        // Show success message
+        alert("Instructor added successfully!")
+        
+        // Refresh the page to show updated data
+        router.refresh()
+      }
+    } catch (error) {
+      console.error("Error adding instructor:", error)
+      alert("Failed to add instructor. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+  
+  const handleEditInstructor = (instructor: Instructor) => {
+    setCurrentInstructor(instructor)
+    setInstructorFormData({
+      name: instructor.name,
+      bio: instructor.bio,
+      image_url: instructor.image_url
+    })
+    setShowEditInstructorForm(true)
+  }
+  
+  const handleUpdateInstructor = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!currentInstructor) return
+    
+    setIsSubmitting(true)
+    
+    try {
+      const updatedInstructor = await updateInstructor(currentInstructor.id, {
+        name: instructorFormData.name,
+        bio: instructorFormData.bio,
+        image_url: instructorFormData.image_url
+      })
+      
+      if (updatedInstructor) {
+        // Update the instructor in local state
+        setInstructors(prev => 
+          prev.map(instructor => 
+            instructor.id === updatedInstructor.id ? updatedInstructor : instructor
+          )
+        )
+        
+        // Reset form and state
+        setIsSubmitting(false)
+        setShowEditInstructorForm(false)
+        setCurrentInstructor(null)
+        setInstructorFormData({
+          name: "",
+          bio: "",
+          image_url: "/placeholder.svg?height=400&width=400"
+        })
+        
+        // Trigger revalidation
+        await revalidateRoutes()
+        
+        // Show success message
+        alert("Instructor updated successfully!")
+        
+        // Refresh the page to show updated data
+        router.refresh()
+      }
+    } catch (error) {
+      console.error("Error updating instructor:", error)
+      alert("Failed to update instructor. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDeleteInstructor = async () => {
+    if (!currentInstructor) return
+    
+    if (window.confirm("Are you sure you want to delete this instructor? This action cannot be undone.")) {
+      setIsSubmitting(true)
+      
+      try {
+        // Delete the instructor from Supabase
+        const success = await deleteInstructor(currentInstructor.id)
+        
+        if (success) {
+          // Remove the instructor from the local state
+          setInstructors(prev => prev.filter(instructor => instructor.id !== currentInstructor.id))
+          
+          // Reset form and state
+          setIsSubmitting(false)
+          setShowEditInstructorForm(false)
+          setCurrentInstructor(null)
+          setInstructorFormData({
+            name: "",
+            bio: "",
+            image_url: "/placeholder.svg?height=400&width=400"
+          })
+          
+          // Trigger revalidation
+          await revalidateRoutes()
+          
+          // Show success message
+          alert("Instructor deleted successfully!")
+          
+          // Refresh the page to show updated data
+          router.refresh()
+        } else {
+          throw new Error("Failed to delete instructor")
+        }
+      } catch (error) {
+        console.error("Error deleting instructor:", error)
+        alert("Failed to delete instructor. Please try again.")
+      } finally {
+        setIsSubmitting(false)
+      }
+    }
+  }
 
   if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-center items-center h-64">
-          <p className="text-lg">Loading...</p>
-        </div>
-      </div>
-    )
+    return <LoadingPage />
   }
 
   return (
@@ -208,7 +510,7 @@ export default function AdminPage() {
                         <h4 className="font-medium">{instructor.name}</h4>
                         <p className="text-sm text-muted-foreground">{instructor.bio.slice(0, 50)}...</p>
                       </div>
-                      <Link href={`/experts#${instructor.id}`}>
+                      <Link href={`/experts/${instructor.id}`}>
                         <Button variant="outline" size="sm">View</Button>
                       </Link>
                     </div>
@@ -337,6 +639,130 @@ export default function AdminPage() {
             </Card>
           ) : null}
           
+          {showEditCourseForm && currentCourse ? (
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle>Edit Course: {currentCourse.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleUpdateCourse} className="space-y-4">
+                  <div>
+                    <label htmlFor="edit-title" className="block text-sm font-medium mb-2">
+                      Course Title
+                    </label>
+                    <Input
+                      id="edit-title"
+                      name="title"
+                      value={courseFormData.title}
+                      onChange={handleCourseChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="edit-description" className="block text-sm font-medium mb-2">
+                      Description
+                    </label>
+                    <Textarea
+                      id="edit-description"
+                      name="description"
+                      rows={4}
+                      value={courseFormData.description}
+                      onChange={handleCourseChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="edit-duration" className="block text-sm font-medium mb-2">
+                      Duration
+                    </label>
+                    <Input
+                      id="edit-duration"
+                      name="duration"
+                      value={courseFormData.duration}
+                      onChange={handleCourseChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="edit-registration_link" className="block text-sm font-medium mb-2">
+                      Registration Link (Optional)
+                    </label>
+                    <Input
+                      id="edit-registration_link"
+                      name="registration_link"
+                      value={courseFormData.registration_link}
+                      onChange={handleCourseChange}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="edit-image_url" className="block text-sm font-medium mb-2">
+                      Image URL
+                    </label>
+                    <Input
+                      id="edit-image_url"
+                      name="image_url"
+                      value={courseFormData.image_url}
+                      onChange={handleCourseChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="edit-instructor" className="block text-sm font-medium mb-2">
+                      Instructor
+                    </label>
+                    <Select 
+                      onValueChange={handleInstructorSelect}
+                      value={courseFormData.instructor_id}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select an instructor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {instructors.map((instructor) => (
+                          <SelectItem key={instructor.id} value={instructor.id}>
+                            {instructor.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="flex justify-between space-x-2 pt-4">
+                    <Button 
+                      type="button" 
+                      variant="destructive" 
+                      onClick={handleDeleteCourse}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? "Deleting..." : "Delete Course"}
+                    </Button>
+                    
+                    <div className="flex space-x-2">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => {
+                          setShowEditCourseForm(false)
+                          setCurrentCourse(null)
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? "Updating..." : "Update Course"}
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          ) : null}
+          
           <div className="space-y-4">
             {courses.map((course) => (
               <Card key={course.id}>
@@ -351,7 +777,13 @@ export default function AdminPage() {
                       <Link href={`/courses/${course.id}`}>
                         <Button variant="outline" size="sm">View</Button>
                       </Link>
-                      <Button variant="outline" size="sm">Edit</Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleEditCourse(course)}
+                      >
+                        Edit
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -363,8 +795,150 @@ export default function AdminPage() {
         <TabsContent value="instructors">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold">Manage Instructors</h2>
-            <Button>Add New Instructor</Button>
+            <Button onClick={() => setShowAddInstructorForm(true)}>Add New Instructor</Button>
           </div>
+          
+          {showAddInstructorForm ? (
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle>Add New Instructor</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleAddInstructor} className="space-y-4">
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-medium mb-2">
+                      Instructor Name
+                    </label>
+                    <Input
+                      id="name"
+                      name="name"
+                      value={instructorFormData.name}
+                      onChange={handleInstructorChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="bio" className="block text-sm font-medium mb-2">
+                      Bio
+                    </label>
+                    <Textarea
+                      id="bio"
+                      name="bio"
+                      rows={4}
+                      value={instructorFormData.bio}
+                      onChange={handleInstructorChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="image_url" className="block text-sm font-medium mb-2">
+                      Profile Image URL
+                    </label>
+                    <Input
+                      id="image_url"
+                      name="image_url"
+                      value={instructorFormData.image_url}
+                      onChange={handleInstructorChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div className="flex justify-end space-x-2 pt-4">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setShowAddInstructorForm(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={isSubmitting}>
+                      {isSubmitting ? "Adding..." : "Add Instructor"}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          ) : null}
+          
+          {showEditInstructorForm && currentInstructor ? (
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle>Edit Instructor: {currentInstructor.name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleUpdateInstructor} className="space-y-4">
+                  <div>
+                    <label htmlFor="edit-name" className="block text-sm font-medium mb-2">
+                      Instructor Name
+                    </label>
+                    <Input
+                      id="edit-name"
+                      name="name"
+                      value={instructorFormData.name}
+                      onChange={handleInstructorChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="edit-bio" className="block text-sm font-medium mb-2">
+                      Bio
+                    </label>
+                    <Textarea
+                      id="edit-bio"
+                      name="bio"
+                      rows={4}
+                      value={instructorFormData.bio}
+                      onChange={handleInstructorChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="edit-image_url" className="block text-sm font-medium mb-2">
+                      Profile Image URL
+                    </label>
+                    <Input
+                      id="edit-image_url"
+                      name="image_url"
+                      value={instructorFormData.image_url}
+                      onChange={handleInstructorChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div className="flex justify-between space-x-2 pt-4">
+                    <Button 
+                      type="button" 
+                      variant="destructive" 
+                      onClick={handleDeleteInstructor}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? "Deleting..." : "Delete Instructor"}
+                    </Button>
+                    
+                    <div className="flex space-x-2">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => {
+                          setShowEditInstructorForm(false)
+                          setCurrentInstructor(null)
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? "Updating..." : "Update Instructor"}
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          ) : null}
           
           <div className="space-y-4">
             {instructors.map((instructor) => (
@@ -376,10 +950,16 @@ export default function AdminPage() {
                       <p className="line-clamp-2">{instructor.bio}</p>
                     </div>
                     <div className="flex space-x-2">
-                      <Link href={`/experts#${instructor.id}`}>
+                      <Link href={`/experts/${instructor.id}`}>
                         <Button variant="outline" size="sm">View</Button>
                       </Link>
-                      <Button variant="outline" size="sm">Edit</Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleEditInstructor(instructor)}
+                      >
+                        Edit
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

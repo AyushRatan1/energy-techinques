@@ -85,6 +85,7 @@ export default async function Home() {
               {instructors.map((instructor) => (
                 <ExpertCard
                   key={instructor.id}
+                  id={instructor.id}
                   name={instructor.name}
                   bio={instructor.bio}
                   image_url={instructor.image_url}
